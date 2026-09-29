@@ -132,7 +132,8 @@ def _category_facts(result: QueryResultData, x: ColumnMeta, m: ColumnMeta, cur: 
     additive = not _NON_ADDITIVE.search(m.name) and m.format != "percent"
     if additive and all(v >= 0 for _, v in ranked) and n > 1:
         total = sum(v for _, v in ranked)
-        scope = f"all {n} {xname} values" if not result.truncated else f"the {n} rows returned"
+        # The query may have been limited (e.g. "top 10"), so never claim this is every value.
+        scope = f"the {n} {xname} values returned"
         if total > 0:
             f.statements.append(
                 f"{top_label} accounts for {top / total * 100:.1f}% of the combined {mname} of {scope} ({fv(total)})."
