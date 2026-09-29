@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     # Demo analytics database, registered automatically as a data source on startup.
     demo_database_url: str | None = f"sqlite:///{(DATA_DIR / 'demo_sales.db').as_posix()}"
     demo_database_name: str = "Sales Demo"
+    # Optional separate URL with write access, used only to seed the demo database.
+    demo_seed_database_url: str | None = None
 
     # Used to encrypt stored data-source credentials. Must be set in production.
     secret_key: SecretStr = SecretStr("dev-only-insecure-secret-change-me")

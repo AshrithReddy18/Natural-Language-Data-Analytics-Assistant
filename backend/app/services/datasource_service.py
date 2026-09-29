@@ -136,15 +136,24 @@ class DataSourceService:
 
         if url.startswith("sqlite"):
             DATA_DIR.mkdir(parents=True, exist_ok=True)
-        counts = seed(url, if_empty=True)
+        # Seeding needs write access; querying uses DEMO_DATABASE_URL, which in Docker is a
+        # read-only role, so the two can differ.
+        counts = seed(settings.demo_seed_database_url or url, if_empty=True)
         if counts:
             log_event(logger, "demo_seeded", **counts)
         existing = self.repo.get_demo()
-        if existing and decrypt(existing.encrypted_url) == url:
-            return
         if existing:
-            registry.evict(existing.id)
-            self.repo.delete(existing)
+            if decrypt(existing.encrypted_url) != url:
+                # Point the existing demo source at the new URL (keeps its conversations).
+                registry.evict(existing.id)
+                schema_service.invalidate(existing.id)
+                existing.kind, existing.encrypted_url, existing.display_url = (
+                    detect_kind(url),
+                    encrypt(url),
+                    redact_url(url),
+                )
+                self.repo.db.commit()
+            return
         self.repo.add(
             DataSource(
                 name=settings.demo_database_name,
