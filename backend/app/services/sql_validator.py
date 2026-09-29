@@ -8,6 +8,7 @@ Defence in depth: even validated SQL is executed in a read-only transaction (Pos
 read-only connection (SQLite) with a statement timeout; see `SQLAlchemyConnector`.
 """
 
+import re
 from dataclasses import dataclass, field
 from typing import cast
 
@@ -219,15 +220,32 @@ class SQLValidator:
             )
         except OptimizeError as exc:
             message = _first_line(exc)
-            # Rephrase sqlglot's wording into something the user and the model can act on.
+            # Rephrase sqlglot's wording into something the user and the model can act on, and say
+            # where the column actually lives: that is exactly what a repair attempt needs.
             if "could not be resolved" in message.lower():
-                return message.split(". Line:")[0] + (" — it does not exist in the referenced tables.")
-            return f"Column check failed: {message}"
+                message = message.split(". Line:")[0] + " — it does not exist in the referenced tables."
+            else:
+                message = f"Column check failed: {message}"
+            return message + self._column_hint(message)
         except SqlglotError:
             # Constructs the qualifier does not understand are not a safety issue (tables and
             # forbidden operations are already checked); let the database be the judge.
             return None
         return None
+
+    def _column_hint(self, message: str) -> str:
+        match = re.search(r"(?:Column '|Unknown column: )(?:\w+\.)?(\w+)", message)
+        if not match:
+            return ""
+        name = match.group(1).lower()
+        owners = [t.name for t in self.schema.tables if any(c.name.lower() == name for c in t.columns)]
+        named = re.search(r"for table: '(\w+)'", message)
+        if named and named.group(1).lower() in {o.lower() for o in owners}:
+            # e.g. `orders.order_date` after `FROM orders AS o`: the alias hides the table name.
+            return f" `{named.group(1)}` is aliased in this query; refer to its columns through the alias."
+        if owners:
+            return f" `{name}` is a column of: {', '.join(owners)} (join that table or select it in the CTE)."
+        return f" No table has a column named `{name}`."
 
 
 def _function_name(node: exp.Func) -> str:

@@ -176,3 +176,20 @@ def test_tables_are_reported(validator: SQLValidator) -> None:
         "SELECT c.city FROM orders o JOIN customers c ON c.customer_id = o.customer_id",
     )
     assert sorted(result.tables) == ["customers", "orders"]
+
+
+def test_column_error_says_which_table_has_the_column(validator: SQLValidator) -> None:
+    result = validator.validate("SELECT c.order_date FROM customers c")
+    assert not result.ok
+    assert "is a column of: orders" in result.error_message
+
+
+def test_column_error_for_nonexistent_column(validator: SQLValidator) -> None:
+    result = validator.validate("SELECT sales_amount FROM orders")
+    assert "No table has a column named `sales_amount`" in result.error_message
+
+
+def test_column_error_explains_aliased_table(validator: SQLValidator) -> None:
+    result = validator.validate("SELECT orders.order_date FROM orders AS o")
+    assert not result.ok
+    assert "is aliased in this query" in result.error_message
