@@ -112,6 +112,15 @@ def test_time_facts_are_correct() -> None:
     assert change.delta_pct == pytest.approx(46.3, abs=0.1)
 
 
+def test_single_labelled_row_keeps_its_label() -> None:
+    r = result(["city", "total_sales"], [["Bengaluru", 11_757_675.17]])
+    chart = recommend_chart(r)
+    facts = compute_facts(r, chart, "INR")
+    assert chart.type == "kpi"
+    assert facts.statements[0] == "Bengaluru: total sales is ₹11.76M."
+    assert (facts.kpis[0].label, facts.kpis[0].value) == ("city", "Bengaluru")
+
+
 def test_average_measures_are_not_summed() -> None:
     r = result(["segment", "avg_order_value"], [["Consumer", 5900.0], ["Corporate", 14300.0]])
     facts = compute_facts(r, recommend_chart(r), "INR")

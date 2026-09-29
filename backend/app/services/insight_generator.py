@@ -90,12 +90,16 @@ def compute_facts(result: QueryResultData, chart: ChartSpec, currency: str = "IN
     if chart.type == "kpi":
         facts = Facts()
         row = result.rows[0]
+        # A single labelled row (e.g. the top city) must keep its label, not just the number.
+        label_col = next((c for c in result.columns if c.kind != "numeric"), None)
+        label = row[result.columns.index(label_col)] if label_col else None
+        if label_col and label is not None:
+            facts.kpis.append(Kpi(label=humanize(label_col.name), value=str(label), format="text"))
         for col in result.columns:
             if col.kind == "numeric":
                 value = row[result.columns.index(col)]
-                facts.statements.append(
-                    f"{humanize(col.name).capitalize()} is {format_value(value, col.format, currency)}."
-                )
+                subject = f"{label}: {humanize(col.name)}" if label is not None else humanize(col.name).capitalize()
+                facts.statements.append(f"{subject} is {format_value(value, col.format, currency)}.")
                 facts.kpis.append(Kpi(label=humanize(col.name), value=value, format=col.format))
         return facts
 
