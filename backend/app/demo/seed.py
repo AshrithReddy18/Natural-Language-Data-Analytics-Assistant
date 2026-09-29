@@ -32,6 +32,8 @@ from sqlalchemy import (
     text,
 )
 
+from app.core.urls import normalize_db_url
+
 START = date(2024, 1, 1)
 END = date(2025, 12, 31)
 SEED = 20240101
@@ -557,7 +559,7 @@ def is_seeded(engine: Engine) -> bool:
 
 def seed(url: str, *, if_empty: bool = True) -> dict[str, int]:
     """Create and populate the demo tables. Returns row counts per table."""
-    engine = create_engine(url)
+    engine = create_engine(normalize_db_url(url))
     try:
         if if_empty and is_seeded(engine):
             return {}

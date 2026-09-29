@@ -13,9 +13,10 @@ from typing import Any
 
 from sqlalchemy import Engine, column, create_engine, func, inspect, select, table, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import DBAPIError, OperationalError, SQLAlchemyError
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.errors import DataSourceUnavailableError, QueryExecutionError, QueryTimeoutError
+from app.core.urls import normalize_db_url
 from app.datasources.base import ColumnInfo, RawResult, Relationship, SchemaSnapshot, TableInfo
 
 logger = logging.getLogger(__name__)
@@ -34,8 +35,7 @@ class SQLAlchemyConnector:
         backend = parsed.get_backend_name()
         if backend == "postgresql":
             self.kind, self.dialect, self.dialect_label = "postgresql", "postgres", "PostgreSQL"
-            if parsed.drivername == "postgresql":
-                parsed = parsed.set(drivername="postgresql+psycopg")
+            parsed = normalize_db_url(parsed)
             self._engine: Engine = create_engine(
                 parsed,
                 pool_pre_ping=True,
@@ -156,44 +156,69 @@ class SQLAlchemyConnector:
         """Run an already-validated SELECT inside a read-only transaction with a hard timeout."""
         started = time.perf_counter()
         try:
-            with self._engine.connect() as conn:
-                if self.kind == "postgresql":
-                    conn.exec_driver_sql("BEGIN READ ONLY")
-                    conn.exec_driver_sql(f"SET LOCAL statement_timeout = {int(timeout_s * 1000)}")
-                else:
-                    self._install_sqlite_deadline(conn, started + timeout_s)
-                result = conn.exec_driver_sql(sql)
-                columns = list(result.keys())
-                fetched = result.fetchmany(max_rows + 1)
-                conn.rollback()
-        except DBAPIError as exc:
-            if _is_timeout(exc):
-                raise QueryTimeoutError(f"The query exceeded the {timeout_s:g}s time limit and was cancelled.") from exc
-            if isinstance(exc, OperationalError) and exc.connection_invalidated:
-                raise DataSourceUnavailableError(detail="connection lost") from exc
-            raise QueryExecutionError(_clean_db_error(exc)) from exc
+            raw = self._engine.raw_connection()
         except SQLAlchemyError as exc:
             raise DataSourceUnavailableError(detail=type(exc).__name__) from exc
+
+        dbapi_error = self._engine.dialect.loaded_dbapi.Error
+        driver_conn: Any = raw.dbapi_connection
+        try:
+            cursor = raw.cursor()
+            if self.kind == "postgresql":
+                # psycopg opens the transaction implicitly; these must be its first statements.
+                cursor.execute("SET TRANSACTION READ ONLY")
+                cursor.execute(f"SET LOCAL statement_timeout = {int(timeout_s * 1000)}")
+            else:
+                deadline = started + timeout_s
+                driver_conn.set_progress_handler(lambda: 1 if time.perf_counter() > deadline else 0, 10_000)
+            # Executed without parameters so the driver does no placeholder parsing: a literal
+            # like LIKE 'abc%' must reach the database unchanged.
+            cursor.execute(sql)
+            columns = [d[0] for d in cursor.description or []]
+            fetched = cursor.fetchmany(max_rows + 1)
+            cursor.close()
+        except dbapi_error as exc:
+            if _is_timeout(exc):
+                raise QueryTimeoutError(f"The query exceeded the {timeout_s:g}s time limit and was cancelled.") from exc
+            if _is_connection_error(exc):
+                raw.invalidate()
+                raise DataSourceUnavailableError(detail="connection lost") from exc
+            raise QueryExecutionError(_clean_db_error(exc)) from exc
+        finally:
+            _release(raw, sqlite=self.kind == "sqlite")
 
         elapsed_ms = int((time.perf_counter() - started) * 1000)
         truncated = len(fetched) > max_rows
         rows = [list(r) for r in fetched[:max_rows]]
         return RawResult(columns=columns, rows=rows, truncated=truncated, elapsed_ms=elapsed_ms)
 
-    @staticmethod
-    def _install_sqlite_deadline(conn: Any, deadline: float) -> None:
-        raw = conn.connection.dbapi_connection
-        raw.set_progress_handler(lambda: 1 if time.perf_counter() > deadline else 0, 10_000)
+
+def _release(raw: Any, *, sqlite: bool) -> None:
+    """Roll back and return the connection to the pool without leftover state."""
+    try:
+        if sqlite and raw.dbapi_connection is not None:
+            raw.dbapi_connection.set_progress_handler(None, 0)
+        if raw.dbapi_connection is not None:
+            raw.rollback()
+    except Exception:
+        raw.invalidate()
+    finally:
+        raw.close()
 
 
-def _is_timeout(exc: DBAPIError) -> bool:
-    orig = exc.orig
-    if getattr(orig, "sqlstate", None) == "57014":  # postgres query_canceled
+def _is_timeout(exc: Exception) -> bool:
+    if getattr(exc, "sqlstate", None) == "57014":  # postgres query_canceled
         return True
-    return isinstance(orig, sqlite3.OperationalError) and "interrupted" in str(orig).lower()
+    return isinstance(exc, sqlite3.OperationalError) and "interrupted" in str(exc).lower()
 
 
-def _clean_db_error(exc: DBAPIError) -> str:
+def _is_connection_error(exc: Exception) -> bool:
+    sqlstate = getattr(exc, "sqlstate", None)
+    # Postgres class 08 = connection exception; psycopg reports None when the socket dropped.
+    return type(exc).__module__.startswith("psycopg") and (sqlstate is None or sqlstate.startswith("08"))
+
+
+def _clean_db_error(exc: Exception) -> str:
     """First line of the driver message: useful for the user and for SQL repair, no stack/URL."""
-    message = str(exc.orig).strip().splitlines()[0] if exc.orig else "Database error"
-    return message[:500]
+    text = str(exc).strip()
+    return (text.splitlines()[0] if text else "Database error")[:500]

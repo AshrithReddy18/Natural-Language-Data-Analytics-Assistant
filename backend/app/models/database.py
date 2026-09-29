@@ -7,6 +7,7 @@ from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import DATA_DIR, get_settings
+from app.core.urls import normalize_db_url
 
 
 class Base(DeclarativeBase):
@@ -28,7 +29,7 @@ def get_engine() -> Engine:
             cur.close()
 
         return engine
-    return create_engine(url, pool_pre_ping=True)
+    return create_engine(normalize_db_url(url), pool_pre_ping=True)
 
 
 @lru_cache
