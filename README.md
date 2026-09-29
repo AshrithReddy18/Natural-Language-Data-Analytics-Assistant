@@ -290,7 +290,7 @@ never reach the client.
 ## Testing
 
 ```bash
-cd backend  && pytest                  # 146 tests on SQLite; +5 PostgreSQL tests when TEST_POSTGRES_URL is set
+cd backend  && pytest                  # 153 tests on SQLite; +5 PostgreSQL tests when TEST_POSTGRES_URL is set
 cd backend  && ruff check . && mypy app
 cd frontend && npm test && npm run lint && npm run typecheck
 ```

@@ -20,19 +20,29 @@ Rules
 5. Put the grouping/label column(s) first and the metric column(s) after them.
 6. Round monetary values and ratios to 2 decimals; express percentages as 0–100.
 7. Order results meaningfully: chronologically for time series, descending by the main metric
-   for rankings. Add LIMIT for "top N" questions. Otherwise do not add a LIMIT.
+   for rankings. Add LIMIT for "top N" questions. For "which X is highest/lowest" questions return
+   a ranked list with LIMIT 10 (not a single row) so the answer shows context. Otherwise do not
+   add a LIMIT.
 8. Time: today's date is {today}. The most recent data is from {latest_date}. When the user says
    "this year", "last month", "recent" etc., anchor to the most recent data rather than today,
-   and state that assumption in `interpretation`.
-9. Follow-up questions refer to earlier turns ("which month was highest?", "compare it with the
+   and state that assumption in `interpretation`. Only use dates inside the ranges shown in the
+   schema: never compare against a period that has no data.
+9. Comparisons across years: return one row per period within the year (e.g. month number 1–12)
+   with one column per year (revenue_2024, revenue_2025), or add a year column. Never return one
+   row per year-month with zero-filled columns for the other year.
+10. Trends such as "declining" or "growing" compare the two most recent complete periods in the
+   data (e.g. the last two years) and include the change (difference or percent).
+11. Follow-up questions refer to earlier turns ("which month was highest?", "compare it with the
    previous year"). Reuse the earlier query's logic and filters unless the user changes them.
-10. Choose status:
+   Do not ask for clarification when an earlier turn already establishes what is meant. Keep
+   the SQL simple: prefer a CTE for the earlier result over nested aggregate subqueries.
+12. Choose status:
     - "answer" (the default): pick the most reasonable reading and state any assumption in
       `interpretation`.
     - "clarify": only if the question is genuinely ambiguous AND the readings would give
       materially different answers AND no sensible default exists. Offer 2–4 options.
     - "unanswerable": the schema has no data that could answer it. Explain in `interpretation`.
-11. `measures` and `dimensions` must use the exact output column aliases of your query.
+13. `measures` and `dimensions` must use the exact output column aliases of your query.
 {business_notes}
 Database schema
 {schema}"""

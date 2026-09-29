@@ -117,9 +117,9 @@ def test_unreachable_server_gives_a_helpful_message() -> None:
     ],
 )
 def test_provider_status(env: dict[str, str], expected: tuple[bool, str, str | None]) -> None:
-    assert llm_status(Settings(**env)) == expected  # type: ignore[arg-type]
+    assert llm_status(Settings(_env_file=None, **env)) == expected  # type: ignore[arg-type, call-arg]
 
 
 def test_gemini_without_key_is_not_configured(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    assert llm_status(Settings(llm_provider="gemini", gemini_api_key=None))[0] is False
+    assert llm_status(Settings(_env_file=None, llm_provider="gemini", gemini_api_key=None))[0] is False  # type: ignore[call-arg]
