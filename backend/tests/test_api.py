@@ -170,6 +170,34 @@ def test_chat_stream_reports_missing_dataset(client: TestClient) -> None:
     assert events == [{"type": "error", "code": "not_found", "message": "Data source not found."}]
 
 
+def test_follow_up_uses_the_conversations_data_source(client: TestClient, demo_id: str, fake_llm: FakeProvider) -> None:
+    from app.core.config import DATA_DIR
+    from app.demo.seed import seed
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    other_path = DATA_DIR / "test_other_source.db"
+    seed(f"sqlite:///{other_path.as_posix()}", if_empty=True)
+    other = client.post("/api/datasets", json={"name": "Other", "url": f"sqlite:///{other_path.as_posix()}"})
+    assert other.status_code == 201, other.text
+    try:
+        fake_llm.plans = [plan(MONTHLY_SQL), plan(MONTHLY_SQL)]
+        first = client.post("/api/chat", json={"data_source_id": demo_id, "question": "Monthly revenue"}).json()
+        conversation_id = first["conversation_id"]
+        client.post(
+            "/api/chat",
+            json={
+                "data_source_id": other.json()["id"],
+                "question": "And the peak?",
+                "conversation_id": conversation_id,
+            },
+        )
+        runs = [r for r in client.get("/api/query/history").json() if r["conversation_id"] == conversation_id]
+        assert {r["data_source_id"] for r in runs} == {demo_id}
+    finally:
+        client.delete(f"/api/datasets/{other.json()['id']}")
+        other_path.unlink(missing_ok=True)
+
+
 def test_unknown_conversation(client: TestClient, demo_id: str) -> None:
     res = client.post("/api/chat", json={"data_source_id": demo_id, "question": "x", "conversation_id": "nope"})
     assert res.status_code == 404

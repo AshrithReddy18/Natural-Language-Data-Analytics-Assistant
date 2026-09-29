@@ -119,6 +119,10 @@ class ChatService:
             conversation = self.conversations.get(conversation_id)
             if conversation is None:
                 raise NotFoundError("Conversation not found.")
+            # Follow-ups always run against the conversation's own database: its history (SQL,
+            # columns) only makes sense there.
+            if conversation.data_source_id != source.id:
+                source = self.sources.get(conversation.data_source_id)
         else:
             conversation = self.conversations.create(title=_title_from(question), data_source_id=source.id)
         if emit:
