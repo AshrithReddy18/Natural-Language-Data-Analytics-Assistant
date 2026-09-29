@@ -37,9 +37,10 @@ export default function SettingsPage() {
           <Row label="API version">{health?.version ?? '—'}</Row>
         </div>
         <p className="mt-3 text-xs text-subtle">
-          Configured on the server via environment variables (<code className="font-mono">LLM_PROVIDER</code>,{' '}
-          <code className="font-mono">LLM_MODEL</code>, <code className="font-mono">ANTHROPIC_API_KEY</code> /{' '}
-          <code className="font-mono">OPENAI_API_KEY</code>). Keys are never sent to the browser.
+          Configured on the server via environment variables: <code className="font-mono">LLM_PROVIDER</code> is{' '}
+          <code className="font-mono">ollama</code> (free, local), <code className="font-mono">gemini</code> (free tier key),{' '}
+          <code className="font-mono">anthropic</code> or <code className="font-mono">openai</code>; optional{' '}
+          <code className="font-mono">LLM_MODEL</code>. Keys are never sent to the browser.
         </p>
       </Card>
 

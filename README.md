@@ -25,6 +25,7 @@ Every step is visible and checkable:
 | | |
 |---|---|
 | **Natural-language questions** | Schema-aware text-to-SQL using structured (JSON-schema) LLM output, validated with Pydantic |
+| **Free to run** | Works with a local model via Ollama (no key) or Google Gemini's free tier, as well as Claude and OpenAI |
 | **Visible, validated SQL** | Syntax-highlighted viewer with line numbers, copy, and "as generated" vs. "validated" toggle |
 | **SQL safety** | AST-based validation (sqlglot), read-only transactions, statement timeouts, row limits, read-only DB role |
 | **Self-correction** | Validation/execution errors are fed back to the model; up to 2 repair attempts, all shown to the user |
@@ -111,8 +112,12 @@ sequences them and turns failures into well-formed results.
   inferred from values and names, and the chart type follows from the result's shape. The model's
   `chart_hint` only breaks ties.
 - **The LLM sits behind a provider interface.** `LLMProvider.generate_structured(...)` returns a
-  validated Pydantic object. Anthropic (default, JSON-schema structured outputs) and OpenAI are
-  implemented, and switching is a config change. Tests use a scripted fake provider.
+  validated Pydantic object. Implementations:
+  - Anthropic (Claude), using JSON-schema structured outputs;
+  - a generic OpenAI-compatible provider that serves OpenAI, Google Gemini and local Ollama models.
+    For servers that don't support strict JSON schemas, it falls back to JSON mode.
+
+  Switching is a config change. Tests use a scripted fake provider.
 - **Business definitions work as a lightweight semantic layer.** Each data source has editable notes,
   such as how "revenue" is computed, and these are sent with every question. The demo defines revenue as
   delivered and shipped orders.
@@ -128,18 +133,44 @@ sequences them and turns failures into well-formed results.
 |---|---|
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS 4, Radix UI primitives (shadcn-style), Recharts, TanStack Query, Zustand, Lucide |
 | Backend | Python 3.12+, FastAPI, Pydantic v2, SQLAlchemy 2, Alembic, sqlglot, psycopg 3 |
-| AI | Anthropic SDK (Claude, structured outputs), OpenAI SDK, provider abstraction |
+| AI | Provider abstraction over Ollama (local), Google Gemini, Anthropic Claude and OpenAI |
 | Data | PostgreSQL 16 (primary), SQLite (zero-setup local mode) |
 | Quality | pytest (SQLite + PostgreSQL), Vitest + Testing Library, ruff, mypy, oxlint, GitHub Actions |
 
 ## Getting started
 
+### Choose an AI provider (free options)
+
+Natural-language chat needs a language model. Two options cost nothing:
+
+**Ollama: a local model, no key, runs offline**
+
+1. Install Ollama from https://ollama.com/download.
+2. Pull a model. It's a one-time ~4.7 GB download and runs well on an 8 GB GPU:
+   ```bash
+   ollama pull qwen2.5-coder:7b
+   ```
+3. Set `LLM_PROVIDER=ollama` in `.env`.
+4. For a stronger model if your hardware allows, set `LLM_MODEL=qwen2.5-coder:14b`.
+
+**Google Gemini: free tier, better SQL quality**
+
+1. Create a free key at https://aistudio.google.com/apikey. No credit card is needed.
+2. Set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY=...` in `.env`.
+
+Local 7B models are good at straightforward questions. The validator and self-correction loop catch
+most of their mistakes, but complex multi-join questions do better on Gemini or Claude. Claude
+(`LLM_PROVIDER=anthropic`) and OpenAI are supported too if you have a paid key.
+
 ### Option A: Docker (PostgreSQL, recommended)
 
 ```bash
-cp .env.example .env          # optionally add ANTHROPIC_API_KEY
+cp .env.example .env          # pick LLM_PROVIDER (see above)
 docker compose up --build
 ```
+
+With Ollama, also set `LLM_BASE_URL=http://host.docker.internal:11434/v1` so the container can reach
+Ollama on your machine.
 
 Open **http://localhost:8080**. On first start:
 - Postgres creates the `sales_demo` database and a read-only `datapilot_reader` role;
@@ -155,7 +186,7 @@ cd backend
 python -m venv .venv
 .venv/Scripts/activate           # Windows;  source .venv/bin/activate on macOS/Linux
 pip install -r requirements-dev.txt
-cp ../.env.example .env          # optional: add ANTHROPIC_API_KEY
+cp ../.env.example .env          # pick LLM_PROVIDER (ollama / gemini are free)
 uvicorn app.main:app --reload
 
 # Frontend → http://localhost:5173  (proxies /api to :8000)
@@ -168,16 +199,17 @@ The first backend start creates `backend/data/datapilot.db`, the metadata store,
 `backend/data/demo_sales.db`, the demo data, in about 3 seconds. To regenerate the demo data, run
 `python -m scripts.seed_demo --force`.
 
-**Without an API key**, schema exploration, the SQL workbench (with charts, KPIs and computed insights)
+**Without an AI provider**, schema exploration, the SQL workbench (with charts, KPIs and computed insights)
 and query history all work. Chat shows a clear "AI not configured" state.
 
 ## Environment variables
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LLM_PROVIDER` | `anthropic` | `anthropic`, `openai` or `none` |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | – | Provider credentials (server-side only) |
-| `LLM_MODEL` | `claude-opus-5-5` / `gpt-4.1` | Model override |
+| `LLM_PROVIDER` | `anthropic` | `ollama` (free, local), `gemini` (free tier), `anthropic`, `openai` or `none` |
+| `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | – | Provider credentials (server-side only) |
+| `LLM_MODEL` | per provider | Model override (defaults: `qwen2.5-coder:7b`, `gemini-3.8-flash`, `claude-opus-5-5`, `gpt-4.1`) |
+| `LLM_BASE_URL` | per provider | Override the API address, e.g. Ollama on another machine |
 | `ANTHROPIC_FALLBACKS` | `true` | Server-side refusal fallback to another Claude model |
 | `DATABASE_URL` | SQLite in `backend/data/` | Metadata store |
 | `DEMO_DATABASE_URL` | SQLite in `backend/data/` | Demo data source (queried) |
@@ -258,7 +290,7 @@ never reach the client.
 ## Testing
 
 ```bash
-cd backend  && pytest                  # 138 tests on SQLite; +5 PostgreSQL tests when TEST_POSTGRES_URL is set
+cd backend  && pytest                  # 146 tests on SQLite; +5 PostgreSQL tests when TEST_POSTGRES_URL is set
 cd backend  && ruff check . && mypy app
 cd frontend && npm test && npm run lint && npm run typecheck
 ```

@@ -39,8 +39,8 @@ class LLMUnavailableError(AppError):
 class LLMNotConfiguredError(LLMUnavailableError):
     code = "llm_not_configured"
     public_message = (
-        "No AI provider is configured. Set ANTHROPIC_API_KEY (or OPENAI_API_KEY with "
-        "LLM_PROVIDER=openai) to enable natural-language questions."
+        "No AI provider is configured. For a free option, set LLM_PROVIDER=ollama (local model) "
+        "or LLM_PROVIDER=gemini with a free GEMINI_API_KEY. See the README."
     )
 
 

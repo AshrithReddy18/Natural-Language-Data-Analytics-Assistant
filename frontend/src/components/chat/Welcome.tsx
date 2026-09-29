@@ -47,8 +47,9 @@ export function Welcome({
         <div className="mt-4 flex flex-col gap-3 rounded-xl border border-warning/30 bg-warning-soft/60 px-4 py-3 text-sm sm:flex-row sm:items-center">
           <KeyRound className="size-4 shrink-0 text-warning" aria-hidden />
           <p className="flex-1 text-muted">
-            <span className="font-medium text-fg">AI is not configured.</span> Add <code className="font-mono text-xs">ANTHROPIC_API_KEY</code>{' '}
-            to <code className="font-mono text-xs">.env</code> to ask questions in plain English. The schema explorer and SQL workbench work without it.
+            <span className="font-medium text-fg">AI is not configured.</span> Use a free local model with{' '}
+            <code className="font-mono text-xs">LLM_PROVIDER=ollama</code>, or a free Gemini key with{' '}
+            <code className="font-mono text-xs">LLM_PROVIDER=gemini</code>. The schema explorer and SQL workbench work without it.
           </p>
           <Button asChild size="sm" variant="secondary">
             <Link to="/sql">Open SQL workbench</Link>

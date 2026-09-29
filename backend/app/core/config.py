@@ -36,12 +36,16 @@ class Settings(BaseSettings):
     secret_key: SecretStr = SecretStr("dev-only-insecure-secret-change-me")
 
     # LLM
-    llm_provider: Literal["anthropic", "openai", "none"] = "anthropic"
+    # anthropic / openai need a paid key; gemini has a free tier; ollama runs locally for free.
+    llm_provider: Literal["anthropic", "openai", "gemini", "ollama", "none"] = "anthropic"
     llm_model: str | None = None
+    # Override the API base URL (e.g. a remote Ollama server or another OpenAI-compatible API).
+    llm_base_url: str | None = None
     llm_timeout_seconds: float = 90.0
     anthropic_api_key: SecretStr | None = None
     anthropic_fallbacks: bool = True
     openai_api_key: SecretStr | None = None
+    gemini_api_key: SecretStr | None = None
 
     # Query execution guard rails
     query_timeout_seconds: float = 15.0
