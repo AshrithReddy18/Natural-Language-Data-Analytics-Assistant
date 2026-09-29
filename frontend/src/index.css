@@ -1,0 +1,136 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Design tokens. Light values here; dark overrides below. Components use roles, never hex. */
+:root {
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --surface-2: #f2f2f4;
+  --surface-3: #e9e9ec;
+  --border: #e3e3e8;
+  --border-strong: #cfcfd6;
+  --text: #0e0f12;
+  --text-muted: #55565f;
+  --text-subtle: #7c7d86;
+  --accent: #2a78d6;
+  --accent-hover: #256abf;
+  --accent-soft: #e6f0fc;
+  --accent-fg: #ffffff;
+  --success: #0f8a4e;
+  --success-soft: #e3f5ec;
+  --warning: #a86200;
+  --warning-soft: #fdf2e0;
+  --danger: #c93636;
+  --danger-soft: #fbe9e9;
+  --ring: #2a78d6;
+  --grid: #ececef;
+  --code-keyword: #7b3fd1;
+  --code-function: #0b69b8;
+  --code-string: #0f7a45;
+  --code-number: #b35c00;
+  --code-comment: #8b8c94;
+
+  /* Categorical chart palette (validated: CVD + normal-vision separation, light surface). */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-8: #e34948;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg: #0b0c0f;
+  --surface: #111317;
+  --surface-2: #171a1f;
+  --surface-3: #1e2229;
+  --border: #22262d;
+  --border-strong: #30353e;
+  --text: #eceef2;
+  --text-muted: #a2a6b0;
+  --text-subtle: #737884;
+  --accent: #3987e5;
+  --accent-hover: #5598e7;
+  --accent-soft: #14233a;
+  --accent-fg: #ffffff;
+  --success: #3fbf7f;
+  --success-soft: #0f2a1d;
+  --warning: #e0a23a;
+  --warning-soft: #2b2011;
+  --danger: #ef6b6b;
+  --danger-soft: #2e1415;
+  --ring: #5598e7;
+  --grid: #1d2026;
+  --code-keyword: #c49bff;
+  --code-function: #72b4ff;
+  --code-string: #7fd4a4;
+  --code-number: #f0a860;
+  --code-comment: #6c717c;
+
+  /* Same eight hues, stepped for the dark surface (validated against #111317). */
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-subtle: var(--text-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-fg: var(--accent-fg);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-ring: var(--ring);
+
+  --animate-pulse-soft: pulse-soft 1.6s ease-in-out infinite;
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+  code, pre, kbd, textarea.font-mono { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+  ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+  :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 6px; }
+  * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
