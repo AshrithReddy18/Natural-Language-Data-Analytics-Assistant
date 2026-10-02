@@ -66,3 +66,21 @@ class QueryTimeoutError(QueryExecutionError):
     code = "query_timeout"
     status_code = 504
     public_message = "The query took too long and was cancelled."
+
+
+class UnauthorizedError(AppError):
+    code = "unauthorized"
+    status_code = 401
+    public_message = "Please sign in."
+
+
+class ForbiddenError(AppError):
+    code = "forbidden"
+    status_code = 403
+    public_message = "You don't have permission to do that."
+
+
+class ConflictError(AppError):
+    code = "conflict"
+    status_code = 409
+    public_message = "That already exists."

@@ -1,6 +1,7 @@
 import {
   Database,
   History,
+  LogOut,
   MessageSquare,
   MoreHorizontal,
   PanelLeftClose,
@@ -9,13 +10,22 @@ import {
   Settings,
   SquareTerminal,
   Trash2,
+  UserRound,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip } from '@/components/ui/overlays'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  Tooltip,
+} from '@/components/ui/overlays'
 import { SectionLabel, Skeleton, StatusDot } from '@/components/ui/primitives'
-import { useActiveDataSource, useConversations, useDeleteConversation } from '@/hooks/queries'
+import { useActiveDataSource, useConversations, useDeleteConversation, useLogout, useMe } from '@/hooks/queries'
 import { dateGroup, type DateGroup } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { useChatStore } from '@/store/chat'
@@ -181,6 +191,38 @@ function DataSourceList({ collapsed, onNavigate }: { collapsed: boolean; onNavig
   )
 }
 
+function AccountMenu({ collapsed }: { collapsed: boolean }) {
+  const { data: user } = useMe()
+  const logout = useLogout()
+  const navigate = useNavigate()
+  if (!user) return null
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Account: ${user.email}`}
+          className={cn(
+            'flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm text-muted transition-colors hover:bg-surface-2 hover:text-fg',
+            collapsed && 'justify-center px-0 py-2',
+          )}
+        >
+          <UserRound className="size-4 shrink-0" aria-hidden />
+          {!collapsed && <span className="min-w-0 flex-1 truncate">{user.email}</span>}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="start" className="min-w-56">
+        <DropdownMenuLabel>Signed in as</DropdownMenuLabel>
+        <div className="truncate px-2 pb-1.5 text-sm text-fg">{user.email}</div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => logout.mutate(undefined, { onSettled: () => navigate('/') })}>
+          <LogOut /> Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function SidebarContent({ collapsed, onNavigate, headerExtra }: {
   collapsed: boolean
   onNavigate?: () => void
@@ -229,6 +271,7 @@ export function SidebarContent({ collapsed, onNavigate, headerExtra }: {
       </div>
       <div className={cn('space-y-3 border-t border-border px-3 py-3', collapsed && 'px-2')}>
         <DataSourceList collapsed={collapsed} onNavigate={onNavigate} />
+        <AccountMenu collapsed={collapsed} />
         <div className={cn('flex items-center gap-1', collapsed && 'flex-col')}>
           <div className="flex-1">
             <NavItem to="/settings" label="Settings" icon={Settings} collapsed={collapsed} onNavigate={onNavigate} />

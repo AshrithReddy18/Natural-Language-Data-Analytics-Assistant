@@ -1,5 +1,6 @@
 """Application settings, loaded from environment variables (and an optional .env file)."""
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -8,7 +9,8 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-DATA_DIR = BACKEND_DIR / "data"
+# Serverless hosts (Vercel) only allow writes under /tmp, which is per-instance and ephemeral.
+DATA_DIR = Path(os.environ.get("DATA_DIR") or ("/tmp/datapilot" if os.environ.get("VERCEL") else BACKEND_DIR / "data"))
 
 
 class Settings(BaseSettings):
@@ -42,6 +44,9 @@ class Settings(BaseSettings):
     # Override the API base URL (e.g. a remote Ollama server or another OpenAI-compatible API).
     llm_base_url: str | None = None
     llm_timeout_seconds: float = 90.0
+    # Models to try, in order, when the main one is overloaded or rate limited (OpenAI-compatible
+    # providers). Unset uses the provider's defaults (Gemini has some); '[]' turns fallbacks off.
+    llm_fallback_models: list[str] | None = None
     anthropic_api_key: SecretStr | None = None
     anthropic_fallbacks: bool = True
     openai_api_key: SecretStr | None = None
@@ -52,6 +57,9 @@ class Settings(BaseSettings):
     max_result_rows: int = Field(default=1000, ge=1, le=10_000)
     default_row_limit: int = Field(default=200, ge=1, le=10_000)
     max_sql_repair_attempts: int = Field(default=2, ge=0, le=5)
+
+    # Uploaded CSV / Excel files, total per upload. Vercel rejects request bodies over 4.5 MB.
+    max_upload_mb: float = Field(default=4.0, gt=0)
 
     # Conversation context sent to the LLM
     context_turns: int = Field(default=4, ge=0, le=20)

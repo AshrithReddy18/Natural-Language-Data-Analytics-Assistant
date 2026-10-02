@@ -73,12 +73,14 @@ export default function SchemaPage() {
         />
       )}
 
-      {source && <BusinessNotes key={source.business_notes ?? ''} id={source.id} notes={source.business_notes ?? ''} />}
+      {source && (
+        <BusinessNotes key={source.business_notes ?? ''} id={source.id} notes={source.business_notes ?? ''} readOnly={source.is_demo} />
+      )}
     </div>
   )
 }
 
-function BusinessNotes({ id, notes }: { id: string; notes: string }) {
+function BusinessNotes({ id, notes, readOnly }: { id: string; notes: string; readOnly: boolean }) {
   const [value, setValue] = useState(notes)
   const update = useUpdateDataset(id)
   const dirty = value !== notes
@@ -88,6 +90,7 @@ function BusinessNotes({ id, notes }: { id: string; notes: string }) {
       <p className="mt-1 text-sm text-muted">
         How metrics are defined for this database (e.g. what counts as revenue). These are given to the AI with every question —
         a lightweight semantic layer you can edit.
+        {readOnly && ' The demo is shared by everyone, so its definitions are read-only.'}
       </p>
       <label htmlFor="business-notes" className="sr-only">Business definitions</label>
       <textarea
@@ -96,9 +99,10 @@ function BusinessNotes({ id, notes }: { id: string; notes: string }) {
         onChange={(e) => setValue(e.target.value)}
         rows={7}
         maxLength={4000}
+        readOnly={readOnly}
         className={cn(inputClass, 'mt-3 font-mono text-[12.5px] leading-relaxed')}
       />
-      <div className="mt-2 flex items-center justify-end gap-2">
+      <div className={cn('mt-2 flex items-center justify-end gap-2', readOnly && 'hidden')}>
         {update.isSuccess && !dirty && (
           <span className="flex items-center gap-1 text-xs text-success"><Check className="size-3.5" /> Saved</span>
         )}

@@ -1,9 +1,10 @@
 import { QueryClientProvider } from '@tanstack/react-query'
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Link, Route, Routes } from 'react-router-dom'
-import { EmptyState, LoadingRows } from '@/components/common/States'
+import { EmptyState, ErrorState, LoadingRows } from '@/components/common/States'
 import { AppShell } from '@/components/layout/AppShell'
 import { TooltipProvider } from '@/components/ui/overlays'
+import { useMe } from '@/hooks/queries'
 import { createQueryClient } from '@/lib/queryClient'
 
 const ChatPage = lazy(() => import('@/pages/ChatPage'))
@@ -12,6 +13,16 @@ const HistoryPage = lazy(() => import('@/pages/HistoryPage'))
 const DataSourcesPage = lazy(() => import('@/pages/DataSourcesPage'))
 const SchemaPage = lazy(() => import('@/pages/SchemaPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
+const AuthPage = lazy(() => import('@/pages/AuthPage'))
+
+/** Everything in the app needs a signed-in user; until then, show the sign-in page. */
+function AuthGate() {
+  const { data: user, isLoading, error, refetch } = useMe()
+  if (isLoading) return <LoadingRows className="mx-auto max-w-3xl p-6" />
+  if (error) return <ErrorState className="m-6" message={error.message} onRetry={() => refetch()} />
+  if (!user) return <AuthPage />
+  return <AppShell />
+}
 
 function NotFound() {
   return (
@@ -28,7 +39,7 @@ export function AppRoutes() {
   return (
     <Suspense fallback={<LoadingRows className="mx-auto max-w-3xl p-6" />}>
       <Routes>
-        <Route element={<AppShell />}>
+        <Route element={<AuthGate />}>
           <Route index element={<ChatPage />} />
           <Route path="c/:conversationId" element={<ChatPage />} />
           <Route path="sql" element={<WorkbenchPage />} />

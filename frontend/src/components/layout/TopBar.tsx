@@ -5,6 +5,7 @@ import { Tooltip } from '@/components/ui/overlays'
 import { Badge, Kbd, StatusDot } from '@/components/ui/primitives'
 import { Select } from '@/components/ui/select'
 import { useActiveDataSource, useHealth } from '@/hooks/queries'
+import { sourceKindLabel, tableCountLabel } from '@/lib/format'
 import { useUIStore } from '@/store/ui'
 
 function DataSourcePicker() {
@@ -21,7 +22,7 @@ function DataSourcePicker() {
       options={sources.map((s) => ({
         value: s.id,
         label: s.name,
-        hint: `${s.kind === 'postgresql' ? 'PostgreSQL' : 'SQLite'}${s.table_count !== null ? ` · ${s.table_count} tables` : ''}${s.status === 'error' ? ' · unavailable' : ''}`,
+        hint: `${sourceKindLabel(s.kind)}${s.table_count !== null ? ` · ${tableCountLabel(s.table_count)}` : ''}${s.status === 'error' ? ' · unavailable' : ''}`,
       }))}
     />
   )

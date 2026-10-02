@@ -2,6 +2,7 @@ import { KeyRound } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { StatusDot } from '@/components/ui/primitives'
+import { tableCountLabel } from '@/lib/format'
 import { SUGGESTIONS } from '@/lib/suggestions'
 import { greeting } from '@/lib/time'
 import type { DataSource } from '@/types/api'
@@ -29,7 +30,7 @@ export function Welcome({
         <div className="mt-6 flex items-center gap-2 text-xs text-muted">
           <StatusDot status={source.status} />
           Connected to <span className="font-medium text-fg">{source.name}</span>
-          {source.table_count !== null && <span className="text-subtle">· {source.table_count} tables</span>}
+          {source.table_count !== null && <span className="text-subtle">· {tableCountLabel(source.table_count)}</span>}
         </div>
       )}
 

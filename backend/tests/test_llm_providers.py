@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from app.core.config import Settings
-from app.core.errors import LLMUnavailableError
+from app.core.errors import LLMOutputError, LLMUnavailableError
 from app.llm.base import ChatTurn
 from app.llm.factory import llm_status
 from app.llm.providers.openai_provider import OpenAIProvider
@@ -25,6 +25,7 @@ class Stub:
         self.requests: list[dict[str, Any]] = []
         self.reject_schema = False
         self.content = json.dumps(REPLY)
+        self.busy: dict[str, int] = {}  # model -> HTTP status to fail with (503 overloaded, 429 rate limited)
 
 
 @pytest.fixture
@@ -35,6 +36,9 @@ def stub() -> Iterator[tuple[Stub, str]]:
         def do_POST(self) -> None:
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             state.requests.append(body)
+            if body["model"] in state.busy:
+                self._send(state.busy[body["model"]], {"error": {"message": "This model is overloaded."}})
+                return
             fmt = body.get("response_format", {}).get("type")
             if state.reject_schema and fmt == "json_schema":
                 self._send(
@@ -95,6 +99,43 @@ def test_falls_back_to_json_mode_when_schema_unsupported(stub: tuple[Stub, str])
     fallback = state.requests[-1]
     assert fallback["response_format"] == {"type": "json_object"}
     assert "JSON schema" in fallback["messages"][0]["content"]
+
+
+def _gemini(url: str) -> OpenAIProvider:
+    return OpenAIProvider(
+        api_key="k", model="main", timeout=10, base_url=url, name="gemini", fallback_models=["backup-1", "backup-2"]
+    )
+
+
+@pytest.mark.parametrize("status", [503, 429])
+def test_busy_model_falls_back_to_the_next_one(stub: tuple[Stub, str], status: int) -> None:
+    state, url = stub
+    state.busy = {"main": status, "backup-1": status}
+    provider = _gemini(url)
+    assert _ask(provider).headline == REPLY["headline"]
+    models = [r["model"] for r in state.requests]
+    assert models[-1] == "backup-2"
+    assert set(models) == {"main", "backup-1", "backup-2"}
+
+    # Busy models cool down: the next request goes straight to the one that worked.
+    state.requests.clear()
+    _ask(provider)
+    assert [r["model"] for r in state.requests] == ["backup-2"]
+
+
+def test_all_models_busy_gives_a_clear_error(stub: tuple[Stub, str]) -> None:
+    state, url = stub
+    state.busy = {"main": 503, "backup-1": 503, "backup-2": 503}
+    with pytest.raises(LLMUnavailableError, match="overloaded"):
+        _ask(_gemini(url))
+
+
+def test_other_errors_do_not_fall_back(stub: tuple[Stub, str]) -> None:
+    state, url = stub
+    state.content = "not json"
+    with pytest.raises(LLMOutputError):
+        _ask(_gemini(url))
+    assert {r["model"] for r in state.requests} == {"main"}
 
 
 def test_unreachable_server_gives_a_helpful_message() -> None:

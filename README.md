@@ -37,6 +37,8 @@ Every step is visible and checkable:
 | **Schema explorer** | Tables, types, keys, relationships, value hints, and editable business definitions |
 | **SQL workbench** | Hand-written SQL through the same validator, executor and analytics (works without an AI key) |
 | **Query history** | Every query with status, rows and timing; reopen any analysis |
+| **Your own data** | Upload CSV / Excel files (each file or sheet becomes a table, with types inferred) or connect a PostgreSQL database |
+| **Accounts** | Email + password sign-in; each user's data sources, chats and history are private. The Sales Demo is shared and read-only |
 
 ![Schema explorer with keys, relationships, value hints and business definitions](docs/screenshots/schema-explorer.png)
 
@@ -202,6 +204,26 @@ The first backend start creates `backend/data/datapilot.db`, the metadata store,
 **Without an AI provider**, schema exploration, the SQL workbench (with charts, KPIs and computed insights)
 and query history all work. Chat shows a clear "AI not configured" state.
 
+### Option C: Deploy to Vercel
+
+`vercel.json` builds the frontend as static files and runs the FastAPI backend as a Python function
+(`api/index.py`) under `/api`, all from one project.
+
+```bash
+npx vercel login
+npx vercel env add LLM_PROVIDER production     # gemini (free tier); Ollama can't run on Vercel
+npx vercel env add GEMINI_API_KEY production
+npx vercel env add SECRET_KEY production       # a long random string
+npx vercel --prod
+```
+
+**Set `DATABASE_URL` to a Postgres database** (e.g. Neon from the Vercel Marketplace). It holds accounts,
+conversations, query history and uploaded files. Without it, that store is a SQLite file in the function's
+`/tmp`, which is per-instance and wiped when an instance is recycled, so users would lose their accounts.
+The demo data can stay in `/tmp`: it is rebuilt on each cold start in about 3 seconds.
+
+Uploads are limited to 4 MB per request (`MAX_UPLOAD_MB`), because Vercel rejects larger request bodies.
+
 ## Environment variables
 
 | Variable | Default | Purpose |
@@ -210,11 +232,14 @@ and query history all work. Chat shows a clear "AI not configured" state.
 | `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | – | Provider credentials (server-side only) |
 | `LLM_MODEL` | per provider | Model override (defaults: `qwen2.5-coder:7b`, `gemini-3.8-flash`, `claude-opus-5-5`, `gpt-4.1`) |
 | `LLM_BASE_URL` | per provider | Override the API address, e.g. Ollama on another machine |
+| `LLM_FALLBACK_MODELS` | Gemini: `["gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash-lite"]` | Models tried in order when the main one is overloaded (503) or rate limited (429); `[]` turns this off |
 | `ANTHROPIC_FALLBACKS` | `true` | Server-side refusal fallback to another Claude model |
 | `DATABASE_URL` | SQLite in `backend/data/` | Metadata store |
 | `DEMO_DATABASE_URL` | SQLite in `backend/data/` | Demo data source (queried) |
 | `DEMO_SEED_DATABASE_URL` | – | Separate owner URL used only for seeding |
-| `SECRET_KEY` | dev value | Encrypts stored connection strings (**set in production**) |
+| `SECRET_KEY` | dev value | Encrypts stored connection strings and signs sign-in sessions (**set in production**; changing it signs everyone out) |
+| `MAX_UPLOAD_MB` | `4` | Total size of one CSV / Excel upload |
+| `DATA_DIR` | `backend/data` (`/tmp/datapilot` on Vercel) | Where SQLite files and uploaded databases are stored on disk |
 | `QUERY_TIMEOUT_SECONDS` | `15` | Statement timeout |
 | `MAX_RESULT_ROWS` | `1000` | Enforced row limit |
 | `MAX_SQL_REPAIR_ATTEMPTS` | `2` | Self-correction attempts |

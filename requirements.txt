@@ -1,5 +1,5 @@
+# Python dependencies for the Vercel function (api/index.py). Keep in sync with backend/requirements.txt.
 fastapi>=0.115
-uvicorn[standard]>=0.30
 sqlalchemy>=2.0.30
 pydantic>=2.8
 pydantic-settings>=2.4

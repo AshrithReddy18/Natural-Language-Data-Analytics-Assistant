@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app import __version__
-from app.api.routes import chat, datasets, health, queries
+from app.api.routes import auth, chat, datasets, health, queries
 from app.core.config import get_settings
 from app.core.errors import AppError
 from app.core.logging import configure_logging, log_event, request_id_var
@@ -110,7 +110,7 @@ def create_app() -> FastAPI:
             status_code=500, content={"error": {"code": "internal_error", "message": "Something went wrong."}}
         )
 
-    for router in (health.router, datasets.router, chat.router, queries.router):
+    for router in (health.router, auth.router, datasets.router, chat.router, queries.router):
         app.include_router(router, prefix="/api")
     return app
 

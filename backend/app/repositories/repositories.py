@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.entities import Conversation, DataSource, Message, QueryRun
@@ -13,8 +13,14 @@ class DataSourceRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def all(self) -> list[DataSource]:
-        return list(self.db.scalars(select(DataSource).order_by(DataSource.is_demo.desc(), DataSource.created_at)))
+    def visible_to(self, owner_id: str) -> list[DataSource]:
+        """The shared demo plus the sources this user added."""
+        stmt = (
+            select(DataSource)
+            .where(or_(DataSource.is_demo.is_(True), DataSource.owner_id == owner_id))
+            .order_by(DataSource.is_demo.desc(), DataSource.created_at)
+        )
+        return list(self.db.scalars(stmt))
 
     def get(self, source_id: str) -> DataSource | None:
         return self.db.get(DataSource, source_id)
@@ -36,11 +42,12 @@ class ConversationRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def with_message_counts(self, limit: int = 100) -> list[tuple[Conversation, int]]:
+    def with_message_counts(self, owner_id: str, limit: int = 100) -> list[tuple[Conversation, int]]:
         counts = select(Message.conversation_id, func.count().label("n")).group_by(Message.conversation_id).subquery()
         stmt = (
             select(Conversation, func.coalesce(counts.c.n, 0))
             .outerjoin(counts, counts.c.conversation_id == Conversation.id)
+            .where(Conversation.owner_id == owner_id)
             .order_by(Conversation.updated_at.desc())
             .limit(limit)
         )
@@ -54,8 +61,8 @@ class ConversationRepository:
         )
         return self.db.scalars(stmt).first()
 
-    def create(self, *, title: str, data_source_id: str) -> Conversation:
-        conversation = Conversation(title=title[:200], data_source_id=data_source_id)
+    def create(self, *, title: str, data_source_id: str, owner_id: str) -> Conversation:
+        conversation = Conversation(title=title[:200], data_source_id=data_source_id, owner_id=owner_id)
         self.db.add(conversation)
         self.db.commit()
         return conversation
@@ -98,8 +105,8 @@ class QueryRunRepository:
         self.db.commit()
         return run
 
-    def recent(self, *, data_source_id: str | None = None, limit: int = 50) -> list[QueryRun]:
-        stmt = select(QueryRun).order_by(QueryRun.created_at.desc()).limit(limit)
+    def recent(self, *, owner_id: str, data_source_id: str | None = None, limit: int = 50) -> list[QueryRun]:
+        stmt = select(QueryRun).where(QueryRun.owner_id == owner_id).order_by(QueryRun.created_at.desc()).limit(limit)
         if data_source_id:
             stmt = stmt.where(QueryRun.data_source_id == data_source_id)
         return list(self.db.scalars(stmt))

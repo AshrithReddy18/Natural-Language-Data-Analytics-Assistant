@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.errors import AppError
-from app.models.entities import DataSource, QueryRun
+from app.models.entities import DataSource, QueryRun, User
 from app.repositories.repositories import QueryRunRepository
 from app.schemas.analysis import AnalysisResult, ErrorInfo, SQLAttempt, SQLInfo, ValidationInfo
 from app.schemas.api import QueryRunOut, QueryValidateResponse
@@ -21,9 +21,10 @@ def _validation_info(v: ValidationResult) -> ValidationInfo:
 
 
 class QueryService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, user: User) -> None:
         self.db = db
-        self.sources = DataSourceService(db)
+        self.user = user
+        self.sources = DataSourceService(db, user)
         self.runs = QueryRunRepository(db)
 
     def _validator(self, source_id: str) -> tuple[SQLValidator, DataSource]:
@@ -75,6 +76,7 @@ class QueryService:
         )
         run = self.runs.add(
             QueryRun(
+                owner_id=self.user.id,
                 data_source_id=source_id,
                 source="workbench",
                 question=None,
@@ -90,4 +92,7 @@ class QueryService:
         return result
 
     def history(self, source_id: str | None, limit: int) -> list[QueryRunOut]:
-        return [QueryRunOut.model_validate(r) for r in self.runs.recent(data_source_id=source_id, limit=limit)]
+        return [
+            QueryRunOut.model_validate(r)
+            for r in self.runs.recent(owner_id=self.user.id, data_source_id=source_id, limit=limit)
+        ]
