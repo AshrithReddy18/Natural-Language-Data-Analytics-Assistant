@@ -202,6 +202,24 @@ The first backend start creates `backend/data/datapilot.db`, the metadata store,
 **Without an AI provider**, schema exploration, the SQL workbench (with charts, KPIs and computed insights)
 and query history all work. Chat shows a clear "AI not configured" state.
 
+### Option C: Deploy to Vercel
+
+`vercel.json` builds the frontend as static files and runs the FastAPI backend as a Python function
+(`api/index.py`) under `/api`, all from one project.
+
+```bash
+npx vercel login
+npx vercel env add LLM_PROVIDER production     # gemini (free tier); Ollama can't run on Vercel
+npx vercel env add GEMINI_API_KEY production
+npx vercel env add SECRET_KEY production       # a long random string
+npx vercel --prod
+```
+
+With no database variables set, both SQLite files live in the function's `/tmp`. The demo data is rebuilt
+on each cold start (about 3 seconds), but conversations and query history are lost whenever an instance
+is recycled. To keep them, add a Postgres database (e.g. Neon from the Vercel Marketplace) and set
+`DATABASE_URL`, plus `DEMO_DATABASE_URL` if you want the demo data there too.
+
 ## Environment variables
 
 | Variable | Default | Purpose |

@@ -1,5 +1,6 @@
 """Application settings, loaded from environment variables (and an optional .env file)."""
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -8,7 +9,10 @@ from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-DATA_DIR = BACKEND_DIR / "data"
+# Serverless hosts (Vercel) only allow writes under /tmp, which is per-instance and ephemeral.
+DATA_DIR = Path(
+    os.environ.get("DATA_DIR") or ("/tmp/datapilot" if os.environ.get("VERCEL") else BACKEND_DIR / "data")
+)
 
 
 class Settings(BaseSettings):
