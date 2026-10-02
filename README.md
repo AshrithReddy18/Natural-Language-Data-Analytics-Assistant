@@ -232,6 +232,7 @@ Uploads are limited to 4 MB per request (`MAX_UPLOAD_MB`), because Vercel reject
 | `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` | – | Provider credentials (server-side only) |
 | `LLM_MODEL` | per provider | Model override (defaults: `qwen2.5-coder:7b`, `gemini-3.8-flash`, `claude-opus-5-5`, `gpt-4.1`) |
 | `LLM_BASE_URL` | per provider | Override the API address, e.g. Ollama on another machine |
+| `LLM_FALLBACK_MODELS` | Gemini: `["gemini-3.7-flash","gemini-3.6-flash","gemini-3.5-flash-lite"]` | Models tried in order when the main one is overloaded (503) or rate limited (429); `[]` turns this off |
 | `ANTHROPIC_FALLBACKS` | `true` | Server-side refusal fallback to another Claude model |
 | `DATABASE_URL` | SQLite in `backend/data/` | Metadata store |
 | `DEMO_DATABASE_URL` | SQLite in `backend/data/` | Demo data source (queried) |

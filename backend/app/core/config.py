@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # Override the API base URL (e.g. a remote Ollama server or another OpenAI-compatible API).
     llm_base_url: str | None = None
     llm_timeout_seconds: float = 90.0
+    # Models to try, in order, when the main one is overloaded or rate limited (OpenAI-compatible
+    # providers). Unset uses the provider's defaults (Gemini has some); '[]' turns fallbacks off.
+    llm_fallback_models: list[str] | None = None
     anthropic_api_key: SecretStr | None = None
     anthropic_fallbacks: bool = True
     openai_api_key: SecretStr | None = None
