@@ -1,16 +1,51 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
+import { ME_KEY } from '@/lib/queryClient'
 import { api } from '@/services/api'
 import { useUIStore } from '@/store/ui'
-import type { DataSourceCreate } from '@/types/api'
+import type { Credentials, DataSourceCreate, DataSourceUpload, User } from '@/types/api'
 
 export const keys = {
+  me: ME_KEY,
   health: ['health'] as const,
   datasets: ['datasets'] as const,
   schema: (id: string) => ['schema', id] as const,
   conversations: ['conversations'] as const,
   conversation: (id: string) => ['conversation', id] as const,
   history: (id?: string) => ['history', id ?? 'all'] as const,
+}
+
+export function useMe() {
+  return useQuery({ queryKey: keys.me, queryFn: api.me, staleTime: Infinity })
+}
+
+/** Drop everything cached for the previous user. The `me` query itself is kept (and then
+ * overwritten), because the auth gate is subscribed to it. */
+function resetUserData(qc: QueryClient) {
+  qc.removeQueries({ predicate: (q) => q.queryKey[0] !== keys.me[0] })
+}
+
+/** Sign in or sign up, then start from a clean cache so nothing from a previous user lingers. */
+export function useAuth(mode: 'login' | 'signup') {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: Credentials) => (mode === 'login' ? api.login(data) : api.signup(data)),
+    onSuccess: (user: User) => {
+      resetUserData(qc)
+      qc.setQueryData(keys.me, user)
+    },
+  })
+}
+
+export function useLogout() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.logout,
+    onSettled: () => {
+      resetUserData(qc)
+      qc.setQueryData(keys.me, null)
+    },
+  })
 }
 
 export function useHealth() {
@@ -77,6 +112,14 @@ export function useCreateDataset() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (data: DataSourceCreate) => api.createDataset(data),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: keys.datasets }),
+  })
+}
+
+export function useUploadDataset() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: DataSourceUpload) => api.uploadDataset(data),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.datasets }),
   })
 }

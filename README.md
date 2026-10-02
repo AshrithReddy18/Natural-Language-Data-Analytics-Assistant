@@ -37,6 +37,8 @@ Every step is visible and checkable:
 | **Schema explorer** | Tables, types, keys, relationships, value hints, and editable business definitions |
 | **SQL workbench** | Hand-written SQL through the same validator, executor and analytics (works without an AI key) |
 | **Query history** | Every query with status, rows and timing; reopen any analysis |
+| **Your own data** | Upload CSV / Excel files (each file or sheet becomes a table, with types inferred) or connect a PostgreSQL database |
+| **Accounts** | Email + password sign-in; each user's data sources, chats and history are private. The Sales Demo is shared and read-only |
 
 ![Schema explorer with keys, relationships, value hints and business definitions](docs/screenshots/schema-explorer.png)
 
@@ -215,10 +217,12 @@ npx vercel env add SECRET_KEY production       # a long random string
 npx vercel --prod
 ```
 
-With no database variables set, both SQLite files live in the function's `/tmp`. The demo data is rebuilt
-on each cold start (about 3 seconds), but conversations and query history are lost whenever an instance
-is recycled. To keep them, add a Postgres database (e.g. Neon from the Vercel Marketplace) and set
-`DATABASE_URL`, plus `DEMO_DATABASE_URL` if you want the demo data there too.
+**Set `DATABASE_URL` to a Postgres database** (e.g. Neon from the Vercel Marketplace). It holds accounts,
+conversations, query history and uploaded files. Without it, that store is a SQLite file in the function's
+`/tmp`, which is per-instance and wiped when an instance is recycled, so users would lose their accounts.
+The demo data can stay in `/tmp`: it is rebuilt on each cold start in about 3 seconds.
+
+Uploads are limited to 4 MB per request (`MAX_UPLOAD_MB`), because Vercel rejects larger request bodies.
 
 ## Environment variables
 
@@ -232,7 +236,9 @@ is recycled. To keep them, add a Postgres database (e.g. Neon from the Vercel Ma
 | `DATABASE_URL` | SQLite in `backend/data/` | Metadata store |
 | `DEMO_DATABASE_URL` | SQLite in `backend/data/` | Demo data source (queried) |
 | `DEMO_SEED_DATABASE_URL` | – | Separate owner URL used only for seeding |
-| `SECRET_KEY` | dev value | Encrypts stored connection strings (**set in production**) |
+| `SECRET_KEY` | dev value | Encrypts stored connection strings and signs sign-in sessions (**set in production**; changing it signs everyone out) |
+| `MAX_UPLOAD_MB` | `4` | Total size of one CSV / Excel upload |
+| `DATA_DIR` | `backend/data` (`/tmp/datapilot` on Vercel) | Where SQLite files and uploaded databases are stored on disk |
 | `QUERY_TIMEOUT_SECONDS` | `15` | Statement timeout |
 | `MAX_RESULT_ROWS` | `1000` | Enforced row limit |
 | `MAX_SQL_REPAIR_ATTEMPTS` | `2` | Self-correction attempts |

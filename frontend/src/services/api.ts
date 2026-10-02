@@ -3,13 +3,16 @@ import type {
   ChatResponse,
   ConversationDetail,
   ConversationSummary,
+  Credentials,
   DatabaseSchema,
   DataSource,
   DataSourceCreate,
+  DataSourceUpload,
   Health,
   QueryRun,
   QueryValidateResponse,
   StreamEvent,
+  User,
 } from '@/types/api'
 
 const BASE = import.meta.env.VITE_API_URL ?? '/api'
@@ -28,10 +31,9 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
   try {
-    res = await fetch(`${BASE}${path}`, {
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
-    })
+    // FormData bodies (file uploads) set their own multipart Content-Type.
+    const headers = init?.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init?.headers }
+    res = await fetch(`${BASE}${path}`, { ...init, headers })
   } catch {
     throw new ApiError(0, 'network_error', 'Cannot reach the DataPilot server. Is the backend running?')
   }
@@ -49,9 +51,27 @@ const json = (data: unknown): RequestInit => ({ body: JSON.stringify(data) })
 export const api = {
   health: () => request<Health>('/health'),
 
+  /** The signed-in user, or null when signed out. */
+  me: () =>
+    request<User>('/auth/me').catch((e: unknown) => {
+      if (e instanceof ApiError && e.status === 401) return null
+      throw e
+    }),
+  login: (data: Credentials) => request<User>('/auth/login', { method: 'POST', ...json(data) }),
+  signup: (data: Credentials) => request<User>('/auth/signup', { method: 'POST', ...json(data) }),
+  logout: () => request<void>('/auth/logout', { method: 'POST' }),
+
   datasets: () => request<DataSource[]>('/datasets'),
   dataset: (id: string) => request<DataSource>(`/datasets/${id}`),
   createDataset: (data: DataSourceCreate) => request<DataSource>('/datasets', { method: 'POST', ...json(data) }),
+  uploadDataset: ({ name, files, description, currency }: DataSourceUpload) => {
+    const body = new FormData()
+    body.set('name', name)
+    if (description) body.set('description', description)
+    if (currency) body.set('currency', currency)
+    for (const file of files) body.append('files', file)
+    return request<DataSource>('/datasets/upload', { method: 'POST', body })
+  },
   updateDataset: (id: string, data: Partial<DataSourceCreate>) =>
     request<DataSource>(`/datasets/${id}`, { method: 'PATCH', ...json(data) }),
   deleteDataset: (id: string) => request<void>(`/datasets/${id}`, { method: 'DELETE' }),

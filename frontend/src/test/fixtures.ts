@@ -98,3 +98,5 @@ export function ndjson(events: StreamEvent[]): Response {
 
 export const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
+
+export const testUser = { id: 'u1', email: 'analyst@example.com', created_at: '2026-10-01T00:00:00Z' }

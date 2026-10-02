@@ -1,19 +1,20 @@
 """Registering, connecting to, and describing data sources."""
 
 import logging
+import os
 from pathlib import Path
 
-from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app.core.config import DATA_DIR, get_settings
-from app.core.errors import AppError, BadRequestError, NotFoundError
+from app.core.errors import AppError, BadRequestError, ForbiddenError, NotFoundError
 from app.core.logging import log_event
 from app.core.security import decrypt, encrypt, redact_url
 from app.datasources.base import Connector, SchemaSnapshot
 from app.datasources.registry import detect_kind, registry
 from app.datasources.sqlalchemy_connector import SQLAlchemyConnector
-from app.models.entities import DataSource
+from app.datasources.uploads import build_sqlite, describe, parse_files
+from app.models.entities import DataSource, User
 from app.repositories.repositories import DataSourceRepository
 from app.schemas.api import (
     ColumnOut,
@@ -38,7 +39,31 @@ DEMO_NOTES = """- Revenue means SUM(order_items.line_total) (already net of disc
 - Profit for an item is line_total - quantity * products.unit_cost."""
 
 
+# (filename, content) pairs. Named at module level: inside DataSourceService, `list` is a method.
+UploadedFiles = list[tuple[str, bytes]]
+
+
+def _upload_path(source: DataSource) -> Path:
+    return DATA_DIR / "uploads" / f"{source.id}.db"
+
+
+def _materialize_upload(source: DataSource) -> str:
+    """The SQLite URL for an uploaded source, writing its stored database to disk if this server
+    instance doesn't have it yet (serverless instances start with an empty disk)."""
+    path = _upload_path(source)
+    if not path.is_file():
+        if not source.upload_data:
+            raise NotFoundError("The uploaded data for this source is missing.")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(f".{os.getpid()}.tmp")
+        tmp.write_bytes(source.upload_data)
+        os.replace(tmp, path)
+    return f"sqlite:///{path.as_posix()}"
+
+
 def connector_for(source: DataSource) -> Connector:
+    if source.kind == "upload":
+        return registry.get(source.id, _materialize_upload(source))
     return registry.get(source.id, decrypt(source.encrypted_url))
 
 
@@ -48,10 +73,8 @@ def _validate_url(url: str) -> str:
     except Exception as exc:
         raise BadRequestError(str(exc) if isinstance(exc, ValueError) else "Invalid connection URL.") from exc
     if kind == "sqlite":
-        # Only files inside the server's data directory: no arbitrary filesystem access.
-        path = Path(make_url(url).database or "").resolve()
-        if DATA_DIR.resolve() not in path.parents:
-            raise BadRequestError(f"SQLite files must be located in the server data directory ({DATA_DIR.name}/).")
+        # Server files are off limits (including other users' uploads): files arrive by upload.
+        raise BadRequestError("SQLite files can't be connected by path. Upload your data as CSV or Excel instead.")
     return kind
 
 
@@ -67,21 +90,57 @@ def to_out(source: DataSource, *, check: bool = False) -> DataSourceOut:
 
 
 class DataSourceService:
-    def __init__(self, db: Session) -> None:
+    """Data sources as seen by one user: the shared demo plus their own. The user is None only
+    for startup tasks (demo setup), which never call the per-user methods."""
+
+    def __init__(self, db: Session, user: User | None = None) -> None:
         self.repo = DataSourceRepository(db)
+        self.user = user
+
+    @property
+    def _owner_id(self) -> str:
+        assert self.user is not None, "DataSourceService needs a user for per-user operations"
+        return self.user.id
 
     def list(self) -> list[DataSourceOut]:
-        return [to_out(s, check=True) for s in self.repo.all()]
+        return [to_out(s, check=True) for s in self.repo.visible_to(self._owner_id)]
 
     def get(self, source_id: str) -> DataSource:
         source = self.repo.get(source_id)
-        if source is None:
+        # Someone else's source is reported as missing, not forbidden: its existence isn't theirs to know.
+        if source is None or not (source.is_demo or source.owner_id == self._owner_id):
             raise NotFoundError("Data source not found.")
         return source
+
+    def _get_own(self, source_id: str) -> DataSource:
+        source = self.get(source_id)
+        if source.is_demo:
+            raise ForbiddenError("The shared demo data source can't be changed.")
+        return source
+
+    def create_upload(
+        self, *, name: str, files: UploadedFiles, description: str | None, currency: str
+    ) -> DataSourceOut:
+        tables = parse_files(files)
+        filenames = ", ".join(f for f, _ in files)
+        source = DataSource(
+            owner_id=self._owner_id,
+            name=name.strip()[:120] or Path(files[0][0]).stem,
+            kind="upload",
+            encrypted_url=encrypt("upload"),
+            display_url=f"Uploaded: {filenames}"[:500],
+            description=description or describe(tables)[:1000],
+            currency=currency.upper(),
+            upload_data=build_sqlite(tables),
+        )
+        self.repo.add(source)
+        log_event(logger, "datasource_uploaded", data_source_id=source.id, tables=len(tables))
+        return to_out(source, check=True)
 
     def create(self, data: DataSourceCreate) -> DataSourceOut:
         kind = _validate_url(data.url)
         source = DataSource(
+            owner_id=self._owner_id,
             name=data.name.strip(),
             kind=kind,
             encrypted_url=encrypt(data.url),
@@ -107,18 +166,18 @@ class DataSourceService:
         return to_out(source, check=True)
 
     def update(self, source_id: str, data: DataSourceUpdate) -> DataSourceOut:
-        source = self.get(source_id)
+        source = self._get_own(source_id)
         for field, value in data.model_dump(exclude_unset=True).items():
             setattr(source, field, value.upper() if field == "currency" and value else value)
         self.repo.db.commit()
         return to_out(source, check=True)
 
     def delete(self, source_id: str) -> None:
-        source = self.get(source_id)
-        if source.is_demo:
-            raise BadRequestError("The demo data source cannot be removed.")
+        source = self._get_own(source_id)
         registry.evict(source.id)
         schema_service.invalidate(source.id)
+        if source.kind == "upload":
+            _upload_path(source).unlink(missing_ok=True)
         self.repo.delete(source)
 
     def schema(self, source_id: str, *, refresh: bool = False) -> SchemaOut:

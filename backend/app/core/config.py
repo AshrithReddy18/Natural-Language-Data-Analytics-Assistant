@@ -10,9 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 # Serverless hosts (Vercel) only allow writes under /tmp, which is per-instance and ephemeral.
-DATA_DIR = Path(
-    os.environ.get("DATA_DIR") or ("/tmp/datapilot" if os.environ.get("VERCEL") else BACKEND_DIR / "data")
-)
+DATA_DIR = Path(os.environ.get("DATA_DIR") or ("/tmp/datapilot" if os.environ.get("VERCEL") else BACKEND_DIR / "data"))
 
 
 class Settings(BaseSettings):
@@ -56,6 +54,9 @@ class Settings(BaseSettings):
     max_result_rows: int = Field(default=1000, ge=1, le=10_000)
     default_row_limit: int = Field(default=200, ge=1, le=10_000)
     max_sql_repair_attempts: int = Field(default=2, ge=0, le=5)
+
+    # Uploaded CSV / Excel files, total per upload. Vercel rejects request bodies over 4.5 MB.
+    max_upload_mb: float = Field(default=4.0, gt=0)
 
     # Conversation context sent to the LLM
     context_turns: int = Field(default=4, ge=0, le=20)

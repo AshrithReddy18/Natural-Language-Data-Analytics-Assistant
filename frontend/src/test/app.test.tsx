@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { useChatStore } from '@/store/chat'
 import { useUIStore } from '@/store/ui'
 import type { ChatResponse } from '@/types/api'
-import { health, json, message, monthlyAnalysis, ndjson, sources } from './fixtures'
+import { health, json, message, monthlyAnalysis, ndjson, sources, testUser } from './fixtures'
 import { mockApi, renderApp } from './render'
 
 const baseRoutes = {
@@ -129,5 +129,60 @@ describe('SQL workbench', () => {
     renderApp('/sql')
     await user.click(await screen.findByRole('button', { name: /Run query/ }))
     expect(await screen.findByRole('img', { name: /Line chart/ })).toBeInTheDocument()
+  })
+})
+
+describe('accounts', () => {
+  it('shows sign-in when signed out, then opens the app after signing in', async () => {
+    const user = userEvent.setup()
+    const fetchMock = mockApi({
+      ...baseRoutes,
+      '/auth/me': () => json({ error: { code: 'unauthorized', message: 'Please sign in.' } }, 401),
+      'POST /auth/login': () => json(testUser),
+    })
+    renderApp('/')
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    await user.type(screen.getByLabelText('Email'), 'analyst@example.com')
+    await user.type(screen.getByLabelText('Password'), 'correct-horse')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByRole('heading', { name: 'Ask your data anything.' })).toBeInTheDocument()
+    const login = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/auth/login'))
+    expect(JSON.parse(String(login?.[1]?.body))).toEqual({ email: 'analyst@example.com', password: 'correct-horse' })
+  })
+
+  it('shows the sign-in error message', async () => {
+    const user = userEvent.setup()
+    mockApi({
+      '/auth/me': () => json({ error: { code: 'unauthorized', message: 'Please sign in.' } }, 401),
+      'POST /auth/login': () => json({ error: { code: 'unauthorized', message: 'Incorrect email or password.' } }, 401),
+    })
+    renderApp('/')
+    await user.type(await screen.findByLabelText('Email'), 'a@b.co')
+    await user.type(screen.getByLabelText('Password'), 'nope')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect email or password.')
+  })
+})
+
+describe('uploading data', () => {
+  it('uploads CSV files as a new data source', async () => {
+    const user = userEvent.setup()
+    const uploaded = { ...sources[1], id: 'up1', name: 'q2-sales', kind: 'upload' }
+    const fetchMock = mockApi({ ...baseRoutes, 'POST /datasets/upload': () => json(uploaded, 201) })
+    renderApp('/data')
+    await user.click(await screen.findByRole('button', { name: /Add data source/ }))
+    const file = new File(['region,amount\nNorth,10\n'], 'q2-sales.csv', { type: 'text/csv' })
+    await user.upload(screen.getByLabelText(/Drop CSV or Excel files/), file)
+
+    expect(screen.getByRole('list', { name: 'Chosen files' })).toHaveTextContent('q2-sales.csv')
+    expect(screen.getByLabelText('Name')).toHaveValue('q2-sales')
+    await user.click(screen.getByRole('button', { name: 'Upload' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    const call = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/datasets/upload'))
+    const body = call?.[1]?.body as FormData
+    expect(body.get('name')).toBe('q2-sales')
+    expect((body.getAll('files')[0] as File).name).toBe('q2-sales.csv')
   })
 })

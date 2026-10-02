@@ -11,7 +11,7 @@ from app.core.errors import LLMNotConfiguredError, NotFoundError
 from app.core.logging import log_event
 from app.llm.base import LLMProvider
 from app.llm.factory import get_llm_provider
-from app.models.entities import Conversation, Message, QueryRun
+from app.models.entities import Conversation, Message, QueryRun, User
 from app.repositories.repositories import ConversationRepository, QueryRunRepository
 from app.schemas.analysis import AnalysisResult, QueryResultData
 from app.schemas.api import ChatResponse, ConversationDetail, ConversationSummary, MessageOut
@@ -95,12 +95,19 @@ def _assistant_text(result: AnalysisResult) -> str:
 
 
 class ChatService:
-    def __init__(self, db: Session, provider: LLMProvider | None = None) -> None:
+    def __init__(self, db: Session, user: User, provider: LLMProvider | None = None) -> None:
         self.db = db
+        self.user = user
         self.conversations = ConversationRepository(db)
         self.runs = QueryRunRepository(db)
-        self.sources = DataSourceService(db)
+        self.sources = DataSourceService(db, user)
         self._provider = provider
+
+    def _own_conversation(self, conversation_id: str, *, with_messages: bool = False) -> Conversation:
+        conversation = self.conversations.get(conversation_id, with_messages=with_messages)
+        if conversation is None or conversation.owner_id != self.user.id:
+            raise NotFoundError("Conversation not found.")
+        return conversation
 
     def _resolve_provider(self) -> LLMProvider | None:
         if self._provider is not None:
@@ -116,15 +123,15 @@ class ChatService:
         settings = get_settings()
         source = self.sources.get(data_source_id)
         if conversation_id:
-            conversation = self.conversations.get(conversation_id)
-            if conversation is None:
-                raise NotFoundError("Conversation not found.")
+            conversation = self._own_conversation(conversation_id)
             # Follow-ups always run against the conversation's own database: its history (SQL,
             # columns) only makes sense there.
             if conversation.data_source_id != source.id:
                 source = self.sources.get(conversation.data_source_id)
         else:
-            conversation = self.conversations.create(title=_title_from(question), data_source_id=source.id)
+            conversation = self.conversations.create(
+                title=_title_from(question), data_source_id=source.id, owner_id=self.user.id
+            )
         if emit:
             emit({"type": "conversation", "conversation_id": conversation.id, "title": conversation.title})
 
@@ -176,6 +183,7 @@ class ChatService:
         if result.error and result.error.code == "query_timeout":
             status = "timeout"
         run = QueryRun(
+            owner_id=self.user.id,
             data_source_id=source_id,
             conversation_id=conversation.id if conversation else None,
             source=source,
@@ -202,13 +210,11 @@ class ChatService:
                 updated_at=c.updated_at,
                 message_count=n,
             )
-            for c, n in self.conversations.with_message_counts()
+            for c, n in self.conversations.with_message_counts(self.user.id)
         ]
 
     def get_conversation(self, conversation_id: str) -> ConversationDetail:
-        c = self.conversations.get(conversation_id, with_messages=True)
-        if c is None:
-            raise NotFoundError("Conversation not found.")
+        c = self._own_conversation(conversation_id, with_messages=True)
         return ConversationDetail(
             id=c.id,
             title=c.title,
@@ -220,7 +226,4 @@ class ChatService:
         )
 
     def delete_conversation(self, conversation_id: str) -> None:
-        c = self.conversations.get(conversation_id)
-        if c is None:
-            raise NotFoundError("Conversation not found.")
-        self.conversations.delete(c)
+        self.conversations.delete(self._own_conversation(conversation_id))
