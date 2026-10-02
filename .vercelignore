@@ -7,3 +7,8 @@ frontend/dist
 .env
 .env.*
 !.env.example
+.claude
+# Local tooling at the repo root, not part of DataPilot
+/package.json
+/package-lock.json
+/.npmrc
