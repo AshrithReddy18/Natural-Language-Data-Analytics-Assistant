@@ -29,7 +29,9 @@ def get_engine() -> Engine:
             cur.close()
 
         return engine
-    return create_engine(normalize_db_url(url), pool_pre_ping=True)
+    # No server-side prepared statements: hosted Postgres often sits behind a transaction-mode
+    # connection pooler (e.g. Neon's), where they can fail between transactions.
+    return create_engine(normalize_db_url(url), pool_pre_ping=True, connect_args={"prepare_threshold": None})
 
 
 @lru_cache

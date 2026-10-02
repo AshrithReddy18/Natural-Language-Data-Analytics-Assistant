@@ -27,6 +27,10 @@ def run_migrations_online() -> None:
         try:
             context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=sqlite)
             with context.begin_transaction():
+                if connection.dialect.name == "postgresql":
+                    # Several serverless instances can cold-start at once and each migrates on
+                    # startup: take turns, so later ones find the schema already up to date.
+                    connection.exec_driver_sql("SELECT pg_advisory_xact_lock(7290001)")
                 context.run_migrations()
             if sqlite:
                 broken = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
