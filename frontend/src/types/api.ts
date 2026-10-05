@@ -99,7 +99,7 @@ export interface Health {
 export interface DataSource {
   id: string
   name: string
-  kind: 'postgresql' | 'sqlite' | string
+  kind: 'postgresql' | 'sqlite' | 'upload' | string
   display_url: string
   description: string | null
   business_notes: string | null
@@ -109,6 +109,24 @@ export interface DataSource {
   status: 'connected' | 'error' | 'unknown'
   status_message: string | null
   table_count: number | null
+}
+
+export interface User {
+  id: string
+  email: string
+  created_at: string
+}
+
+export interface Credentials {
+  email: string
+  password: string
+}
+
+export interface DataSourceUpload {
+  name: string
+  files: File[]
+  description?: string
+  currency?: string
 }
 
 export interface DataSourceCreate {

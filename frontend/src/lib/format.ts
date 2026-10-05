@@ -33,3 +33,9 @@ export function formatValue(value: Cell, format: ValueFormat, currency = 'INR', 
 export function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`
 }
+
+const SOURCE_KINDS: Record<string, string> = { postgresql: 'PostgreSQL', sqlite: 'SQLite', upload: 'Uploaded files' }
+
+export const sourceKindLabel = (kind: string) => SOURCE_KINDS[kind] ?? kind
+
+export const tableCountLabel = (n: number) => `${n} ${n === 1 ? 'table' : 'tables'}`

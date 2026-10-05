@@ -8,7 +8,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.database import Base
@@ -22,12 +22,27 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+def _owner_column() -> Mapped[str | None]:
+    return mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+
+
 class DataSource(Base):
     __tablename__ = "data_sources"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    # NULL only for the shared demo source.
+    owner_id: Mapped[str | None] = _owner_column()
     name: Mapped[str] = mapped_column(String(120))
-    kind: Mapped[str] = mapped_column(String(20))  # "postgresql" | "sqlite"
+    kind: Mapped[str] = mapped_column(String(20))  # "postgresql" | "sqlite" | "upload"
     encrypted_url: Mapped[str] = mapped_column(Text)
     display_url: Mapped[str] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -36,6 +51,9 @@ class DataSource(Base):
     business_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="INR")
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False)
+    # For uploaded files: the SQLite database built from them. Kept here so it survives on hosts
+    # whose local disk is ephemeral, and copied to the data directory when first queried.
+    upload_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -43,6 +61,7 @@ class Conversation(Base):
     __tablename__ = "conversations"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    owner_id: Mapped[str | None] = _owner_column()
     title: Mapped[str] = mapped_column(String(200))
     data_source_id: Mapped[str] = mapped_column(ForeignKey("data_sources.id", ondelete="CASCADE"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -73,6 +92,7 @@ class QueryRun(Base):
     __tablename__ = "query_runs"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    owner_id: Mapped[str | None] = _owner_column()
     data_source_id: Mapped[str] = mapped_column(ForeignKey("data_sources.id", ondelete="CASCADE"), index=True)
     conversation_id: Mapped[str | None] = mapped_column(
         ForeignKey("conversations.id", ondelete="CASCADE"), nullable=True, index=True

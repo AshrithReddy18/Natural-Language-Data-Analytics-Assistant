@@ -57,7 +57,7 @@ def test_unknown_dataset_is_404_with_error_envelope(client: TestClient) -> None:
     ("url", "fragment"),
     [
         ("mysql://u:p@localhost/db", "Unsupported database type"),
-        ("sqlite:///C:/Windows/system.db", "data directory"),
+        ("sqlite:///C:/Windows/system.db", "Upload your data"),
         ("not a url", "Invalid"),
     ],
 )
@@ -73,15 +73,17 @@ def test_create_dataset_with_unreachable_postgres(client: TestClient) -> None:
     assert "secret" not in res.text
 
 
-def test_demo_dataset_cannot_be_deleted(client: TestClient, demo_id: str) -> None:
-    assert client.delete(f"/api/datasets/{demo_id}").status_code == 400
+def test_shared_demo_dataset_cannot_be_changed(client: TestClient, demo_id: str) -> None:
+    assert client.delete(f"/api/datasets/{demo_id}").status_code == 403
+    assert client.patch(f"/api/datasets/{demo_id}", json={"business_notes": "x"}).status_code == 403
 
 
-def test_update_business_notes(client: TestClient, demo_id: str) -> None:
-    original = client.get(f"/api/datasets/{demo_id}").json()["business_notes"]
-    res = client.patch(f"/api/datasets/{demo_id}", json={"business_notes": "Revenue excludes tax."})
-    assert res.json()["business_notes"] == "Revenue excludes tax."
-    client.patch(f"/api/datasets/{demo_id}", json={"business_notes": original})
+def test_update_business_notes(client: TestClient) -> None:
+    files = {"files": ("notes.csv", b"region,amount\nNorth,10\n", "text/csv")}
+    source_id = client.post("/api/datasets/upload", files=files).json()["id"]
+    res = client.patch(f"/api/datasets/{source_id}", json={"business_notes": "Amounts exclude tax."})
+    assert res.json()["business_notes"] == "Amounts exclude tax."
+    client.delete(f"/api/datasets/{source_id}")
 
 
 def test_query_validate_and_execute(client: TestClient, demo_id: str) -> None:
@@ -171,13 +173,8 @@ def test_chat_stream_reports_missing_dataset(client: TestClient) -> None:
 
 
 def test_follow_up_uses_the_conversations_data_source(client: TestClient, demo_id: str, fake_llm: FakeProvider) -> None:
-    from app.core.config import DATA_DIR
-    from app.demo.seed import seed
-
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    other_path = DATA_DIR / "test_other_source.db"
-    seed(f"sqlite:///{other_path.as_posix()}", if_empty=True)
-    other = client.post("/api/datasets", json={"name": "Other", "url": f"sqlite:///{other_path.as_posix()}"})
+    files = {"files": ("other.csv", b"month,revenue\n2025-01,10\n", "text/csv")}
+    other = client.post("/api/datasets/upload", data={"name": "Other"}, files=files)
     assert other.status_code == 201, other.text
     try:
         fake_llm.plans = [plan(MONTHLY_SQL), plan(MONTHLY_SQL)]
@@ -195,7 +192,6 @@ def test_follow_up_uses_the_conversations_data_source(client: TestClient, demo_i
         assert {r["data_source_id"] for r in runs} == {demo_id}
     finally:
         client.delete(f"/api/datasets/{other.json()['id']}")
-        other_path.unlink(missing_ok=True)
 
 
 def test_unknown_conversation(client: TestClient, demo_id: str) -> None:

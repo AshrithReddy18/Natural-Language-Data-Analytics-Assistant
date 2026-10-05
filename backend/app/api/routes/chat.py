@@ -9,10 +9,11 @@ from fastapi import APIRouter, Depends, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db
+from app.api.dependencies import get_current_user, get_db
 from app.core.errors import AppError
 from app.core.logging import request_id_var
 from app.models.database import get_session_factory
+from app.models.entities import User
 from app.schemas.api import ChatRequest, ChatResponse, ConversationDetail, ConversationSummary
 from app.services.chat_service import ChatService
 
@@ -23,15 +24,15 @@ _DONE = object()
 
 
 @router.post("/chat", response_model=ChatResponse)
-def chat(body: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
+def chat(body: ChatRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> ChatResponse:
     """Ask a question and wait for the complete answer."""
-    return ChatService(db).ask(
+    return ChatService(db, user).ask(
         question=body.question, data_source_id=body.data_source_id, conversation_id=body.conversation_id
     )
 
 
 @router.post("/chat/stream")
-def chat_stream(body: ChatRequest) -> StreamingResponse:
+def chat_stream(body: ChatRequest, user: User = Depends(get_current_user)) -> StreamingResponse:
     """Ask a question and receive newline-delimited JSON events as each pipeline step runs:
 
     {"type": "conversation", ...} → {"type": "step", "step": "generate", "status": "running"} ...
@@ -39,12 +40,15 @@ def chat_stream(body: ChatRequest) -> StreamingResponse:
     """
     events: queue.Queue[Any] = queue.Queue()
     request_id = request_id_var.get()
+    user_id = user.id
 
     def worker() -> None:
         request_id_var.set(request_id)
         db = get_session_factory()()
         try:
-            response = ChatService(db).ask(
+            owner = db.get(User, user_id)
+            assert owner is not None
+            response = ChatService(db, owner).ask(
                 question=body.question,
                 data_source_id=body.data_source_id,
                 conversation_id=body.conversation_id,
@@ -72,16 +76,22 @@ def chat_stream(body: ChatRequest) -> StreamingResponse:
 
 
 @router.get("/conversations", response_model=list[ConversationSummary])
-def list_conversations(db: Session = Depends(get_db)) -> list[ConversationSummary]:
-    return ChatService(db).list_conversations()
+def list_conversations(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> list[ConversationSummary]:
+    return ChatService(db, user).list_conversations()
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetail)
-def get_conversation(conversation_id: str, db: Session = Depends(get_db)) -> ConversationDetail:
-    return ChatService(db).get_conversation(conversation_id)
+def get_conversation(
+    conversation_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> ConversationDetail:
+    return ChatService(db, user).get_conversation(conversation_id)
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
-def delete_conversation(conversation_id: str, db: Session = Depends(get_db)) -> Response:
-    ChatService(db).delete_conversation(conversation_id)
+def delete_conversation(
+    conversation_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> Response:
+    ChatService(db, user).delete_conversation(conversation_id)
     return Response(status_code=204)

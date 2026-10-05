@@ -5,11 +5,14 @@ import { MemoryRouter } from 'react-router-dom'
 import { AppRoutes } from '@/App'
 import { createQueryClient } from '@/lib/queryClient'
 import { TooltipProvider } from '@/components/ui/overlays'
+import { json, testUser } from './fixtures'
 
 type Handler = (url: string, init?: RequestInit) => Response | Promise<Response>
 
-/** Replace fetch with a router over path prefixes (longest match wins). */
-export function mockApi(routes: Record<string, Handler>) {
+/** Replace fetch with a router over path prefixes (longest match wins). A user is signed in
+ * unless the routes override '/auth/me'. */
+export function mockApi(overrides: Record<string, Handler>) {
+  const routes: Record<string, Handler> = { '/auth/me': () => json(testUser), ...overrides }
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
     const key = Object.keys(routes)

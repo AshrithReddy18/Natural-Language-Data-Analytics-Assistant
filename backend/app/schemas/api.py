@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.schemas.analysis import AnalysisResult, ValidationInfo
 
@@ -15,6 +15,32 @@ class HealthOut(BaseModel):
     llm_configured: bool
     llm_provider: str
     llm_model: str | None
+
+
+# -- accounts --------------------------------------------------------------------------------
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(min_length=1, max_length=254)
+    password: str = Field(min_length=1, max_length=200)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _normalise_email(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+
+class SignupRequest(LoginRequest):
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(min_length=8, max_length=200)
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    email: str
+    created_at: datetime
 
 
 # -- data sources ----------------------------------------------------------------------------

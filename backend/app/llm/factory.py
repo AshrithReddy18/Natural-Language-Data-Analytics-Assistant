@@ -21,6 +21,8 @@ class CompatiblePreset:
     base_url: str
     default_model: str
     key_env: str | None  # environment variable holding the key; None = no key needed
+    # Tried in order when the model is overloaded or rate limited.
+    fallback_models: tuple[str, ...] = ()
 
 
 PRESETS = {
@@ -28,6 +30,8 @@ PRESETS = {
         base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         default_model="gemini-3.8-flash",
         key_env="GEMINI_API_KEY",
+        # Popular models get overloaded at peak times, and on the free tier each has its own quota.
+        fallback_models=("gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"),
     ),
     "ollama": CompatiblePreset(
         base_url="http://localhost:11434/v1",
@@ -97,4 +101,7 @@ def get_llm_provider() -> LLMProvider:
             unreachable_hint=f"Could not reach Ollama at {base_url}. Is Ollama running (`ollama serve`)?",
         )
     key = _secret(s.gemini_api_key) or os.environ.get(preset.key_env or "")
-    return OpenAIProvider(api_key=key, model=model, timeout=s.llm_timeout_seconds, base_url=base_url, name=name)
+    fallbacks = preset.fallback_models if s.llm_fallback_models is None else s.llm_fallback_models
+    return OpenAIProvider(
+        api_key=key, model=model, timeout=s.llm_timeout_seconds, base_url=base_url, name=name, fallback_models=fallbacks
+    )
